@@ -5,7 +5,6 @@ import time
 # Global variables
 Nd = 9  # Number of digits (in the case of standard Sudoku puzzles, this is 9).
 
-
 class Population(object):
     """ A set of candidate solutions to the Sudoku puzzle. These candidates are also known as the chromosomes in the population. """
 
@@ -214,7 +213,7 @@ def sudoku_solver(Nc, Ng, Mr, given):
     population.seed(Nc, given)
 
     print("Randomly Generated Board:")
-    print(numpy.matrix(given.values))
+    print_sudoku_board(given.values)
 
     # Evolution loop
     for g in range(0, Ng):
@@ -228,7 +227,7 @@ def sudoku_solver(Nc, Ng, Mr, given):
         if population.candidates:
             best_solution = population.candidates[0]
             print("Best Solution:")
-            print(numpy.matrix(best_solution.values))
+            print_sudoku_board(best_solution.values)
 
             # Create a new population
             new_population = Population()
@@ -257,7 +256,7 @@ def sudoku_solver(Nc, Ng, Mr, given):
     if population.candidates:
         best_solution = population.candidates[0]
         print("\nFinal Best Solution:")
-        print(numpy.matrix(best_solution.values))
+        print_sudoku_board(best_solution.values)
     else:
         print("No solution found.")
 
@@ -272,6 +271,17 @@ def crossover(parent1, parent2):
                 child.values[i][j] = parent2.values[i][j]
     return child
 
+def print_sudoku_board(board):
+    for i in range(len(board)):
+        if i % 3 == 0 and i != 0:
+            print("-" * 21)  # Print horizontal line after every 3 rows
+        for j in range(len(board[i])):
+            if j % 3 == 0 and j != 0:
+                print("|", end=" ")  # Print vertical line after every 3 columns
+            if j == 8:
+                print(board[i][j])
+            else:
+                print(str(board[i][j]) + " ", end="")
 
 # Random Sudoku puzzle generator
 def generate_sudoku():

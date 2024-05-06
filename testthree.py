@@ -148,6 +148,32 @@ def genetic_algorithm(population_size, max_generations, mutation_rate):
 
     return best_solution
 
+# def print_sudoku_board(board):
+#     for i in range(len(board)):
+#         if i % 3 == 0 and i != 0:
+#             print("-" * 21)  # Print horizontal line after every 3 rows
+#         for j in range(len(board[i])):
+#             if j % 3 == 0 and j != 0:
+#                 print("|", end=" ")  # Print vertical line after every 3 columns
+#             if j == 8:
+#                 print(board[i][j])
+#             else:
+#                 print(str(board[i][j]) + " ", end="")
+
+
+def test_initial_values_changed(initial_board, generation_boards):
+    for gen_board in generation_boards:
+        for i in range(9):
+            for j in range(9):
+                # Check if the cell is initially filled
+                if initial_board[i][j] != 0:
+                    # If the value in the same cell in the generation board is different
+                    # and the value in the initial board is not 0 (indicating an empty cell),
+                    # and the value in the generation board is not 0 (indicating it was not mutated)
+                    if initial_board[i][j] != gen_board[i][j] and gen_board[i][j] != 0:
+                        return False
+    return True
+
 # Example usage
 print("Randomly generated Sudoku puzzle:")
 random_puzzle = generate_sudoku(num_filled_entries=random.randint(25, 30))
@@ -158,3 +184,10 @@ best_solution = genetic_algorithm(population_size=50, max_generations=1000, muta
 print("\nBest solution found:")
 for row in best_solution:
     print(row)
+    
+    # Test if initially filled values remained unchanged
+generation_boards = [random_puzzle]  # Store initial board
+for _ in range(10):
+    generation_boards.append(mutate(best_solution.copy()))  # Store 10 mutated boards
+test_result = test_initial_values_changed(random_puzzle, generation_boards)
+print("\nTest Result:", "Passed" if test_result else "Failed")

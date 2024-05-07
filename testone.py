@@ -4,46 +4,45 @@ from collections import Counter
 import time
 import copy
 
-# Function to generate a random Sudoku puzzle with a specified number of filled entries
-def generate_sudoku(num_filled_entries):
+# generate a random sudoku puzzle
+def generate_sudoku(numFilledEntries):
     base = 3
     side = base * base
     board = [[0] * side for _ in range(side)]
 
-    # Fill the main diagonal of each 3x3 subgrid with random numbers
+    # fill diagonal of 3x3 with random nums
     for i in range(0, side, base):
         nums = random.sample(range(1, side + 1), base)
         for j in range(base):
             board[i + j][i + j] = nums[j]
 
-    # Solve the Sudoku puzzle
+    # Solve the puzzle to check if the puzzle is solvable. Remove random entries to create the puzzle
     if solve_sudoku(board):
-        # Randomly remove entries to create the puzzle
-        empty_cells = 81 - num_filled_entries
+        empty_cells = 81 - numFilledEntries
         empty_indices = random.sample(range(81), empty_cells)
         for idx in empty_indices:
             row, col = divmod(idx, 9)
             board[row][col] = 0
         return board
     else:
-        # If the generated puzzle cannot be solved, regenerate it
-        return generate_sudoku(num_filled_entries)
+        # if it's not solvable, then regenerate it
+        return generate_sudoku(numFilledEntries)
 
-# Function to solve a Sudoku puzzle using backtracking
+# backtrack method to solve sudolku, for checking validity of the generated board.
 def solve_sudoku(board):
     empty_cell = find_empty_cell(board)
     if not empty_cell:
-        return True  # Puzzle solved
+        return True 
     row, col = empty_cell
     for num in range(1, 10):
         if is_safe(board, row, col, num):
             board[row][col] = num
             if solve_sudoku(board):
                 return True
-            board[row][col] = 0  # Backtrack
+            board[row][col] = 0
     return False
 
-# Function to find an empty cell in the Sudoku puzzle
+# check for empty cell
 def find_empty_cell(board):
     for i in range(9):
         for j in range(9):
@@ -51,7 +50,7 @@ def find_empty_cell(board):
                 return (i, j)
     return None
 
-# Function to check if a number can be placed in a cell
+# check if a number can be placed in a cell
 def is_safe(board, row, col, num):
     # Check row and column
     if num in board[row] or num in [board[i][col] for i in range(9)]:
@@ -64,17 +63,18 @@ def is_safe(board, row, col, num):
                 return False
     return True
 
-# Function to evaluate fitness of a Sudoku solution
+# fitness function for sudoku, penalties for having the same entry listed more than once to
+#encourage the algorithm to select better fit generations.
 def sudoku_fitness(solution):
     fitness = 0
-    # Check rows and columns for duplicates
+    # check for duplicates
     for i in range(9):
         row_counts = Counter(solution[i])
         col_counts = Counter(solution[j][i] for j in range(9))
         fitness -= sum((count - 1) ** 2 for count in row_counts.values() if count > 1)
         fitness -= sum((count - 1) ** 2 for count in col_counts.values() if count > 1)
 
-    # Check 3x3 subgrids for duplicates
+    # heck 3x3 subgrid
     for i in range(0, 9, 3):
         for j in range(0, 9, 3):
             subgrid_counts = Counter(solution[x][y] for x in range(i, i+3) for y in range(j, j+3))
@@ -83,7 +83,7 @@ def sudoku_fitness(solution):
     return fitness
 
 
-# Function to perform selection
+# selection
 def select(population, fitness_scores, num_selected):
     selected_indices = np.argsort(fitness_scores)[-num_selected:]
     return [population[i] for i in selected_indices]
@@ -94,7 +94,7 @@ def mutate(solution, initial_board, mutation_rate):
         for j in range(9):
             if initial_board[i][j] == 0 and random.random() < mutation_rate:
                 valid_values = [num for num in range(1, 10) if num not in mutated_solution[i] and num not in [mutated_solution[x][j] for x in range(9)]]
-                if valid_values:  # Ensure there are valid values to choose from
+                if valid_values:
                     mutated_solution[i][j] = random.choice(valid_values)
     return mutated_solution
 
@@ -102,17 +102,17 @@ def crossover(parent1, parent2, initial_board):
     crossover_point = random.randint(1, 8)
     child1 = copy.deepcopy(parent1[:crossover_point]) + copy.deepcopy(parent2[crossover_point:])
     child2 = copy.deepcopy(parent2[:crossover_point]) + copy.deepcopy(parent1[crossover_point:])
-    # Adjust offspring to preserve initially filled values
+    #need to make sure the initially designated values of the puzzle don't change
     for i in range(9):
         for j in range(9):
             if initial_board[i][j] != 0:
                 child1[i][j] = initial_board[i][j]
                 child2[i][j] = initial_board[i][j]
-    # Check for and resolve duplicate values
+    # try to resolve occurences of duplicate values
     child1 = resolve_duplicates(child1)
     child2 = resolve_duplicates(child2)
     return child1, child2
-
+#doesn't quite get rid of duplicate values, needs better logic
 def resolve_duplicates(solution):
     for i in range(9):
         row_counts = Counter(solution[i])
@@ -126,11 +126,10 @@ def resolve_duplicates(solution):
     return solution
 
 
-# Function to generate initial population
+# set initial population for gen 0
 def initialize_population(population_size):
-    return [generate_sudoku(num_filled_entries=random.randint(25, 30)) for _ in range(population_size)]
+    return [generate_sudoku(numFilledEntries=random.randint(25, 30)) for _ in range(population_size)]
 
-# Main genetic algorithm function
 def genetic_algorithm(population_size, max_generations, mutation_rate, initial_board):
     start_time = time.time()
     population = initialize_population(population_size)
@@ -159,10 +158,11 @@ def genetic_algorithm(population_size, max_generations, mutation_rate, initial_b
         new_population = []
         while len(new_population) < population_size:
             parent1, parent2 = random.choices(selected, k=2)
-            if random.random() < mutation_rate:  # Favor mutation
+            #checks mutation, assigns probability to mutation and the rest is used for crossover
+            if random.random() < mutation_rate: 
                 offspring = mutate(parent1, initial_board, mutation_rate)
                 mutation_count += 1
-            else:  # Use remaining probability for crossover
+            else:  
                 offspring1, offspring2 = crossover(parent1, parent2, initial_board)
                 offspring = random.choice([offspring1, offspring2])
                 crossover_count += 1
@@ -171,7 +171,7 @@ def genetic_algorithm(population_size, max_generations, mutation_rate, initial_b
         population = new_population
         generation += 1
 
-        # Check elapsed time and stop if exceeds 30 seconds
+        # time check to make sure this thing doesn't run for hours on end
         if time.time() - start_time > 30:
             break
 
@@ -184,34 +184,34 @@ def genetic_algorithm(population_size, max_generations, mutation_rate, initial_b
 
     return best_solution
 
-# Function for hill climbing local search
+# hill climbing local search takes over after genetic mutations to further refine the final solution.
 def hill_climbing(initial_solution):
     current_solution = copy.deepcopy(initial_solution)
     current_fitness = sudoku_fitness(current_solution)
 
-    # Iterate through each cell in the Sudoku grid
+    # check each cell
     for i in range(9):
         for j in range(9):
-            if initial_board[i][j] == 0:  # Only consider empty cells
+            #only change empty cells
+            if initial_board[i][j] == 0: 
                 for num in range(1, 10):
-                    # Try changing the value of the cell
                     current_solution[i][j] = num
-                    # Check if the new solution is valid
+                    # check if new number is valid
                     if is_valid(current_solution):
                         new_fitness = sudoku_fitness(current_solution)
-                        # If the new solution is better, update the current solution and fitness
+                        # if new solution is more fit, update
                         if new_fitness > current_fitness:
                             current_fitness = new_fitness
                         else:
-                            # Revert the change if the new solution is not better
+                            # if it's not, revert
                             current_solution[i][j] = initial_solution[i][j]
                     else:
-                        # Revert the change if the new solution violates Sudoku rules
+                        # revert if the change isn't valid
                         current_solution[i][j] = initial_solution[i][j]
     
     return current_solution
 
-# Function to check if a Sudoku solution is valid (no duplicate values in rows, columns, or 3x3 subgrids)
+#check if a solution is valid (no duplicate values in rows, columns, or 3x3 subgrids)
 def is_valid(solution):
     for i in range(9):
         row_counts = Counter(solution[i])
@@ -228,15 +228,14 @@ def is_valid(solution):
 
 
 
-# Function to print the Sudoku board
 def print_sudoku(board):
     for row in board:
         print(row)
 
-# Example usage
 print("Randomly generated Sudoku puzzle:")
-random_puzzle = generate_sudoku(num_filled_entries=random.randint(25, 30))
-initial_board = copy.deepcopy(random_puzzle)  # Make a deep copy of the initial puzzle
+random_puzzle = generate_sudoku(numFilledEntries=random.randint(25, 30))
+#copy the initial puzzle to preserve the values
+initial_board = copy.deepcopy(random_puzzle) 
 print_sudoku(random_puzzle)
 print("\nSolving using genetic algorithm...\n")
 best_solution = genetic_algorithm(population_size=50, max_generations=1000, mutation_rate=0.4, initial_board=initial_board)

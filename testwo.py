@@ -1,316 +1,271 @@
 import numpy as np
 import random
+from collections import Counter
 import time
+import copy
 
-# Global variables
-Nd = 9  # Number of digits (in the case of standard Sudoku puzzles, this is 9).
-
-
-class Population(object):
-    """ A set of candidate solutions to the Sudoku puzzle. These candidates are also known as the chromosomes in the population. """
-
-    def __init__(self):
-        self.candidates = []
-
-    def seed(self, Nc, given):
-        self.candidates = []
-        helper = Candidate()
-        helper.values = [[[] for j in range(0, Nd)] for i in range(0, Nd)]
-        for row in range(0, Nd):
-            for column in range(0, Nd):
-                for value in range(1, 10):
-                    if ((given.values[row][column] == 0) and not (given.is_column_duplicate(column, value) or given.is_block_duplicate(row, column, value) or given.is_row_duplicate(row, value))):
-                        helper.values[row][column].append(value)
-                    elif (given.values[row][column] != 0):
-                        helper.values[row][column].append(given.values[row][column])
-                        break
-
-        for p in range(0, Nc):
-            g = Candidate()
-            for i in range(0, Nd):
-                row = np.zeros(Nd)
-                for j in range(0, Nd):
-                    if (given.values[i][j] != 0):
-                        row[j] = given.values[i][j]
-                    elif (given.values[i][j] == 0):
-                        row[j] = helper.values[i][j][random.randint(0, len(helper.values[i][j]) - 1)]
-
-                while (len(list(set(row))) != Nd):
-                    for j in range(0, Nd):
-                        if (given.values[i][j] == 0):
-                            row[j] = helper.values[i][j][random.randint(0, len(helper.values[i][j]) - 1)]
-
-                g.values[i] = row
-
-            self.candidates.append(g)
-
-        self.update_fitness()
-
-    def update_fitness(self):
-        """ Update fitness of every candidate/chromosome. """
-        for candidate in self.candidates:
-            candidate.update_fitness()
-
-    def sort(self):
-        """ Sort the population based on fitness. """
-        self.candidates.sort(key=lambda x: x.fitness if x.fitness is not None else 0, reverse=True)
-
-
-class Candidate(object):
-    """ A candidate solutions to the Sudoku puzzle. """
-
-    def __init__(self):
-        self.values = np.zeros((Nd, Nd), dtype=int)
-        self.fitness = None
-
-    def update_fitness(self):
-        """ The fitness of a candidate solution is determined by how close it is to being the actual solution to the puzzle. The actual solution (i.e. the 'fittest') is defined as a 9x9 grid of numbers in the range [1, 9] where each row, column and 3x3 block contains the numbers [1, 9] without any duplicates (see e.g. http://www.sudoku.com/); if there are any duplicates then the fitness will be lower. """
-
-        row_count = np.zeros(Nd)
-        column_count = np.zeros(Nd)
-        block_count = np.zeros(Nd)
-        row_sum = 0
-        column_sum = 0
-        block_sum = 0
-
-        for i in range(0, Nd):  # For each row...
-            for j in range(0, Nd):  # For each number within it...
-                row_count[self.values[i][j] - 1] += 1  # ...Update list with occurrence of a particular number.
-
-            row_sum += (1.0 / len(set(row_count))) / Nd
-            row_count = np.zeros(Nd)
-
-        for i in range(0, Nd):  # For each column...
-            for j in range(0, Nd):  # For each number within it...
-                column_count[self.values[j][i] - 1] += 1  # ...Update list with occurrence of a particular number.
-
-            column_sum += (1.0 / len(set(column_count))) / Nd
-            column_count = np.zeros(Nd)
-
-        # For each block...
-        for i in range(0, Nd, 3):
-            for j in range(0, Nd, 3):
-                block_count[self.values[i][j] - 1] += 1
-                block_count[self.values[i][j + 1] - 1] += 1
-                block_count[self.values[i][j + 2] - 1] += 1
-
-                block_count[self.values[i + 1][j] - 1] += 1
-                block_count[self.values[i + 1][j + 1] - 1] += 1
-                block_count[self.values[i + 1][j + 2] - 1] += 1
-
-                block_count[self.values[i + 2][j] - 1] += 1
-                block_count[self.values[i + 2][j + 1] - 1] += 1
-                block_count[self.values[i + 2][j + 2] - 1] += 1
-
-                block_sum += (1.0 / len(set(block_count))) / Nd
-                block_count = np.zeros(Nd)
-
-        # Calculate overall fitness.
-        if (int(row_sum) == 1 and int(column_sum) == 1 and int(block_sum) == 1):
-            fitness = 1.0
-        else:
-            fitness = column_sum * block_sum
-
-        self.fitness = fitness
-
-    def mutate(self, mutation_rate, given):
-        """ Mutate a candidate by picking a row, and then picking two values within that row to swap. """
-
-        r = random.uniform(0, 1.1)
-        while (r > 1):  # Outside [0, 1] boundary - choose another
-            r = random.uniform(0, 1.1)
-
-        success = False
-        if (r < mutation_rate):  # Mutate.
-            while (not success):
-                row1 = random.randint(0, 8)
-                row2 = random.randint(0, 8)
-                row2 = row1
-
-                from_column = random.randint(0, 8)
-                to_column = random.randint(0, 8)
-                while (from_column == to_column):
-                    from_column = random.randint(0, 8)
-                    to_column = random.randint(0, 8)
-
-                # Check if the two places are free...
-                if (given.values[row1][from_column] == 0 and given.values[row1][to_column] == 0):
-                    # ...and that we are not causing a duplicate in the rows' columns.
-                    if (not given.is_column_duplicate(to_column, self.values[row1][from_column])
-                            and not given.is_column_duplicate(from_column, self.values[row2][to_column])
-                            and not given.is_block_duplicate(row2, to_column, self.values[row1][from_column])
-                            and not given.is_block_duplicate(row1, from_column, self.values[row2][to_column])):
-
-                        # Swap values.
-                        temp = self.values[row2][to_column]
-                        self.values[row2][to_column] = self.values[row1][from_column]
-                        self.values[row1][from_column] = temp
-                        success = True
-
-        return success
-
-
-class Given(Candidate):
-    """ The grid containing the given/known values. """
-
-    def __init__(self, values):
-        self.values = values
-
-    def is_row_duplicate(self, row, value):
-        """ Check whether there is a duplicate of a fixed/given value in a row. """
-        for column in range(0, Nd):
-            if (self.values[row][column] == value):
-                return True
-        return False
-
-    def is_column_duplicate(self, column, value):
-        """ Check whether there is a duplicate of a fixed/given value in a column. """
-        for row in range(0, Nd):
-            if (self.values[row][column] == value):
-                return True
-        return False
-
-    def is_block_duplicate(self, row, column, value):
-        """ Check whether there is a duplicate of a fixed/given value in a 3 x 3 block. """
-        i = 3 * (int(row / 3))
-        j = 3 * (int(column / 3))
-
-        if ((self.values[i][j] == value)
-                or (self.values[i][j + 1] == value)
-                or (self.values[i][j + 2] == value)
-                or (self.values[i + 1][j] == value)
-                or (self.values[i + 1][j + 1] == value)
-                or (self.values[i + 1][j + 2] == value)
-                or (self.values[i + 2][j] == value)
-                or (self.values[i + 2][j + 1] == value)
-                or (self.values[i + 2][j + 2] == value)):
-            return True
-        else:
-            return False
-
-
-class Tournament(object):
-    """ The crossover function requires two parents to be selected from the population pool. The Tournament class is used to do this.
-
-    Two individuals are selected from the population pool and a random number in [0, 1] is chosen. If this number is less than the 'selection rate' (e.g. 0.85), then the fitter individual is selected; otherwise, the weaker one is selected.
-    """
-
-    def __init__(self):
-        return
-
-    def compete(self, candidates):
-        """ Pick 2 random candidates from the population and get them to compete against each other. """
-        c1 = candidates[random.randint(0, len(candidates) - 1)]
-        c2 = candidates[random.randint(0, len(candidates) - 1)]
-        if c1.fitness is not None and c2.fitness is not None:
-            if c1.fitness > c2.fitness:
-                return c1
-            else:
-                return c2
-        elif c1.fitness is not None:
-            return c1
-        elif c2.fitness is not None:
-            return c2
-        else:
-            return None
-
-
-def sudoku_solver(Nc, Ng, Mr, given):
-    population = Population()
-    population.seed(Nc, given)
-
-    print("Randomly Generated Puzzle:")
-    print(np.matrix(given.values))
-
-    # Evolution loop
-    for g in range(0, Ng):
-        # Display message for each iteration
-        print(f"\nGeneration {g + 1}:")
-
-        # Sort candidates
-        start_time = time.time()
-        population.sort()
-        end_time = time.time()
-        print(f"Time taken to sort: {end_time - start_time:.6f} seconds")
-
-        # Print the best solution
-        best_solution = population.candidates[0]
-        print("Best Solution:")
-        print(np.matrix(best_solution.values))
-
-        # Create a new population
-        new_population = Population()
-
-        # Reproduction
-        while len(new_population.candidates) < Nc:
-            tournament = Tournament()
-            parent1 = tournament.compete(population.candidates)
-            parent2 = tournament.compete(population.candidates)
-            if parent1 is not None and parent2 is not None:
-                child = crossover(parent1, parent2)
-                if random.uniform(0, 1) < Mr:
-                    child.mutate(Mr, given)
-                new_population.candidates.append(child)
-
-        # Update population
-        population = new_population
-
-        # If no solution is found, break the loop
-        if not population.candidates:
-            print("No solution found.")
-            break
-
-    # Sort candidates
-    population.sort()
-
-    # Print the final best solution
-    best_solution = population.candidates[0]
-    print("\nFinal Best Solution:")
-    print(np.matrix(best_solution.values))
-
-
-def crossover(parent1, parent2):
-    child = Candidate()
-    for i in range(Nd):
-        for j in range(Nd):
-            if random.randint(0, 1) == 0:
-                child.values[i][j] = parent1.values[i][j]
-            else:
-                child.values[i][j] = parent2.values[i][j]
-    return child
-
-
-# Random Sudoku puzzle generator
-def generate_sudoku():
+# generate a random sudoku puzzle
+def generate_sudoku(numFilledEntries):
     base = 3
     side = base * base
+    board = [[0] * side for _ in range(side)]
 
-    # pattern for a baseline valid solution
-    def pattern(r, c): return (base * (r % base) + r // base + c) % side
+    # fill diagonal of 3x3 with random nums
+    for i in range(0, side, base):
+        nums = random.sample(range(1, side + 1), base)
+        for j in range(base):
+            board[i + j][i + j] = nums[j]
 
-    # randomize rows, columns and numbers (of valid base pattern)
-    from random import sample
+    # Solve the puzzle to check if the puzzle is solvable. Remove random entries to create the puzzle
+    if solve_sudoku(board):
+        empty_cells = 81 - numFilledEntries
+        empty_indices = random.sample(range(81), empty_cells)
+        for idx in empty_indices:
+            row, col = divmod(idx, 9)
+            board[row][col] = 0
+        return board
+    else:
+        # if it's not solvable, then regenerate it
+        return generate_sudoku(numFilledEntries)
 
-    def shuffle(s): return sample(s, len(s))
-    rBase = range(base)
-    rows = [g * base + r for g in shuffle(rBase) for r in shuffle(rBase)]
-    cols = [g * base + c for g in shuffle(rBase) for c in shuffle(rBase)]
-    nums = shuffle(range(1, base * base + 1))
+# backtrack method to solve sudolku, for checking validity of the generated board.
+def solve_sudoku(board):
+    empty_cell = find_empty_cell(board)
+    if not empty_cell:
+        return True 
+    row, col = empty_cell
+    for num in range(1, 10):
+        if is_safe(board, row, col, num):
+            board[row][col] = num
+            if solve_sudoku(board):
+                return True
+            board[row][col] = 0
+    return False
 
-    # produce board using randomized baseline pattern
-    board = [[nums[pattern(r, c)] for c in cols] for r in rows]
+# check for empty cell
+def find_empty_cell(board):
+    for i in range(9):
+        for j in range(9):
+            if board[i][j] == 0:
+                return (i, j)
+    return None
 
-    return np.array(board)
+# check if a number can be placed in a cell
+def is_safe(board, row, col, num):
+    # Check row and column
+    if num in board[row] or num in [board[i][col] for i in range(9)]:
+        return False
+    # Check 3x3 subgrid
+    start_row, start_col = 3 * (row // 3), 3 * (col // 3)
+    for i in range(3):
+        for j in range(3):
+            if board[start_row + i][start_col + j] == num:
+                return False
+    return True
+
+# fitness function for sudoku, penalties for having the same entry listed more than once to
+#encourage the algorithm to select better fit generations.
+def sudoku_fitness(solution):
+    fitness = 0
+    # check for duplicates
+    for i in range(9):
+        row_counts = Counter(solution[i])
+        col_counts = Counter(solution[j][i] for j in range(9))
+        fitness -= sum((count - 1) ** 2 for count in row_counts.values() if count > 1)
+        fitness -= sum((count - 1) ** 2 for count in col_counts.values() if count > 1)
+
+    # heck 3x3 subgrid
+    for i in range(0, 9, 3):
+        for j in range(0, 9, 3):
+            subgrid_counts = Counter(solution[x][y] for x in range(i, i+3) for y in range(j, j+3))
+            fitness -= sum((count - 1) ** 2 for count in subgrid_counts.values() if count > 1)
+
+    return fitness
 
 
-if __name__ == "__main__":
-    # Parameters
-    Nc = 10  # Number of candidates in the population.
-    Ng = 50  # Number of generations.
-    Mr = 0.01  # Mutation rate.
+# selection
+def select(population, fitness_scores, num_selected):
+    selected_indices = np.argsort(fitness_scores)[-num_selected:]
+    return [population[i] for i in selected_indices]
 
-    # Generate random Sudoku puzzle
-    given = Given(generate_sudoku())
+def mutate(solution, initial_board, mutation_rate):
+    mutated_solution = copy.deepcopy(solution)
+    for i in range(9):
+        for j in range(9):
+            if initial_board[i][j] == 0 and random.random() < mutation_rate:
+                valid_values = [num for num in range(1, 10) if num not in mutated_solution[i] and num not in [mutated_solution[x][j] for x in range(9)]]
+                if valid_values:
+                    mutated_solution[i][j] = random.choice(valid_values)
+    return mutated_solution
 
-    # Solve Sudoku puzzle
-    sudoku_solver(Nc, Ng, Mr, given)
+def crossover(parent1, parent2, initial_board):
+    crossover_point = random.randint(1, 8)
+    child1 = copy.deepcopy(parent1[:crossover_point]) + copy.deepcopy(parent2[crossover_point:])
+    child2 = copy.deepcopy(parent2[:crossover_point]) + copy.deepcopy(parent1[crossover_point:])
+    #need to make sure the initially designated values of the puzzle don't change
+    for i in range(9):
+        for j in range(9):
+            if initial_board[i][j] != 0:
+                child1[i][j] = initial_board[i][j]
+                child2[i][j] = initial_board[i][j]
+    # try to resolve occurences of duplicate values
+    child1 = resolve_duplicates(child1)
+    child2 = resolve_duplicates(child2)
+    return child1, child2
+#doesn't quite get rid of duplicate values, needs better logic
+def resolve_duplicates(solution):
+    for i in range(9):
+        row_counts = Counter(solution[i])
+        for num, count in row_counts.items():
+            if count > 1:
+                empty_indices = [j for j in range(9) if solution[i][j] == 0]
+                for j in empty_indices:
+                    if num not in [solution[x][j] for x in range(9)]:
+                        solution[i][j] = num
+                        break
+    return solution
+
+
+# set initial population for gen 0
+def initialize_population(population_size):
+    return [generate_sudoku(numFilledEntries=random.randint(25, 30)) for _ in range(population_size)]
+
+def genetic_algorithm(population_size, max_generations, mutation_rate, initial_board):
+    start_time = time.time()
+    population = initialize_population(population_size)
+    best_fitness = float('-inf')
+    best_solution = None
+    generation = 0
+    stagnation_count = 0
+    mutation_count = 0
+    crossover_count = 0
+
+    while generation < max_generations and stagnation_count < 100:
+        fitness_scores = [sudoku_fitness(solution) for solution in population]
+        max_fitness = max(fitness_scores)
+        if max_fitness > best_fitness:
+            best_fitness = max_fitness
+            best_solution = population[np.argmax(fitness_scores)]
+            stagnation_count = 0
+            print(f"Generation {generation}: Found new best solution with fitness {max_fitness}")
+            filled_grid_spots = sum(row.count(0) for row in best_solution)
+            print(f"Filled grid spots: {81 - filled_grid_spots}")
+        else:
+            stagnation_count += 1
+
+        selected = select(population, fitness_scores, num_selected=10)
+
+        new_population = []
+        while len(new_population) < population_size:
+            parent1, parent2 = random.choices(selected, k=2)
+            #checks mutation, assigns probability to mutation and the rest is used for crossover
+            if random.random() < mutation_rate: 
+                offspring = mutate(parent1, initial_board, mutation_rate)
+                mutation_count += 1
+            else:  
+                offspring1, offspring2 = crossover(parent1, parent2, initial_board)
+                offspring = random.choice([offspring1, offspring2])
+                crossover_count += 1
+            new_population.append(offspring)
+
+        population = new_population
+        generation += 1
+
+        # time check to make sure this thing doesn't run for hours on end
+        if time.time() - start_time > 30:
+            break
+
+    end_time = time.time()
+    total_time = end_time - start_time
+    print(f"\nTotal generations: {generation}")
+    print(f"Total time taken: {total_time} seconds")
+    print(f"Total mutations occurred: {mutation_count}")
+    print(f"Total crossovers occurred: {crossover_count}")
+
+    return best_solution
+
+# hill climbing local search takes over after genetic mutations to further refine the final solution.
+def is_valid_solution(solution):
+    # Check rows and columns for duplicates
+    for i in range(9):
+        row_counts = Counter(solution[i])
+        if any(count > 1 for count in row_counts.values()):
+            return False
+        col_counts = Counter(solution[j][i] for j in range(9))
+        if any(count > 1 for count in col_counts.values()):
+            return False
+
+    # Check 3x3 subgrids for duplicates
+    for i in range(0, 9, 3):
+        for j in range(0, 9, 3):
+            subgrid_counts = Counter(solution[x][y] for x in range(i, i+3) for y in range(j, j+3))
+            if any(count > 1 for count in subgrid_counts.values()):
+                return False
+
+    return True
+     
+def hill_climbing(initial_solution, initial_board):
+    current_solution = copy.deepcopy(initial_solution)
+    current_fitness = sudoku_fitness(current_solution)
+
+    # initialize the best solution and the fitness
+    best_solution = copy.deepcopy(current_solution)
+    best_fitness = current_fitness
+
+    while True:
+        # go through each cell
+        for i in range(9):
+            for j in range(9):
+                # skip initial values from the puzzle
+                if initial_board[i][j] != 0:
+                    continue
+
+                # try all values possible
+                for value in range(1, 10):
+                    if current_solution[i][j] == value:
+                        continue
+
+                    current_solution[i][j] = value
+
+                    #check validity
+                    if is_valid_solution(current_solution):
+                        # update fitness
+                        new_fitness = sudoku_fitness(current_solution)
+
+                        # change best solution of new solution is better
+                        if new_fitness > best_fitness:
+                            best_solution = copy.deepcopy(current_solution)
+                            best_fitness = new_fitness
+
+                    # revert
+                    current_solution[i][j] = initial_solution[i][j]
+
+        # if no improvements, break
+        if best_fitness <= current_fitness:
+            break
+
+        # update solution and fitness
+        current_solution = copy.deepcopy(best_solution)
+        current_fitness = best_fitness
+
+    return best_solution
+
+
+def print_sudoku(board):
+    for row in board:
+        print(row)
+
+print("Randomly generated Sudoku puzzle:")
+random_puzzle = generate_sudoku(numFilledEntries=random.randint(25, 30))
+#copy the initial puzzle to preserve the values
+initial_board = copy.deepcopy(random_puzzle) 
+print_sudoku(random_puzzle)
+print("\nSolving using genetic algorithm...\n")
+best_solution = genetic_algorithm(population_size=50, max_generations=1000, mutation_rate=0.4, initial_board=initial_board)
+print("\nBest solution found:")
+print_sudoku(best_solution)
+
+print("\nApplying hill climbing local search...\n")
+final_solution = hill_climbing(best_solution, initial_board)
+print("\nBest solution after hill climbing:")
+print_sudoku(final_solution)

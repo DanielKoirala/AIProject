@@ -83,14 +83,18 @@ def sudoku_fitness(solution):
     return fitness
 
 # Function to perform selection
-def select(population, fitness_scores, num_selected, initial_population):
-    if len(initial_population) == 0:
-        selected_indices = np.argsort(fitness_scores)[-num_selected:]
-    else:
-        selected_indices = np.argsort(fitness_scores[len(initial_population):])[-num_selected:]
+def select(population, fitness_scores, num_selected):
+    selected_indices = np.argsort(fitness_scores)[-num_selected:]
     return [population[i] for i in selected_indices]
 
-# Function to perform crossover
+def mutate(solution, initial_board, mutation_rate):
+    mutated_solution = copy.deepcopy(solution)
+    for i in range(9):
+        for j in range(9):
+            if initial_board[i][j] == 0 and random.random() < mutation_rate:
+                mutated_solution[i][j] = random.randint(1, 9)
+    return mutated_solution
+
 def crossover(parent1, parent2, initial_board):
     crossover_point = random.randint(1, 8)
     child1 = copy.deepcopy(parent1[:crossover_point]) + copy.deepcopy(parent2[crossover_point:])
@@ -99,29 +103,22 @@ def crossover(parent1, parent2, initial_board):
     for i in range(9):
         for j in range(9):
             if initial_board[i][j] != 0:
-                child1[i][j] = parent1[i][j]
-                child2[i][j] = parent2[i][j]
+                child1[i][j] = initial_board[i][j]
+                child2[i][j] = initial_board[i][j]
     return child1, child2
 
-# Function to perform mutation
-def mutate(solution, initial_board):
-    mutated_solution = copy.deepcopy(solution)
-    row = random.randint(0, 8)
-    col = random.randint(0, 8)
-    # Check if the cell is initially filled
-    if initial_board[row][col] == 0:
-        mutated_solution[row][col] = random.randint(1, 9)
-    return mutated_solution
+
+
+
 
 # Function to generate initial population
 def initialize_population(population_size):
     return [generate_sudoku(num_filled_entries=random.randint(25, 30)) for _ in range(population_size)]
 
 # Main genetic algorithm function
-def genetic_algorithm(population_size, max_generations, mutation_rate):
+def genetic_algorithm(population_size, max_generations, mutation_rate, initial_board):
     start_time = time.time()
-    initial_population = initialize_population(population_size)
-    population = initial_population[:]
+    population = initialize_population(population_size)
     best_fitness = float('-inf')
     best_solution = None
     generation = 0
@@ -137,39 +134,53 @@ def genetic_algorithm(population_size, max_generations, mutation_rate):
             best_solution = population[np.argmax(fitness_scores)]
             stagnation_count = 0
             print(f"Generation {generation}: Found new best solution with fitness {max_fitness}")
-            print("Best solution so far:")
-            for row in best_solution:
-                print(row)
             filled_grid_spots = sum(row.count(0) for row in best_solution)
             print(f"Filled grid spots: {81 - filled_grid_spots}")
         else:
             stagnation_count += 1
 
-        selected = select(population, fitness_scores, num_selected=10, initial_population=initial_population)
+        selected = select(population, fitness_scores, num_selected=10)
 
         new_population = []
         while len(new_population) < population_size:
             parent1, parent2 = random.choices(selected, k=2)
             if random.random() < mutation_rate:
+                offspring = mutate(parent1, initial_board, mutation_rate)
                 mutation_count += 1
-                offspring = mutate(parent1 if sudoku_fitness(parent1) > sudoku_fitness(parent2) else parent2, initial_board=initial_population[0])
             else:
+                offspring1, offspring2 = crossover(parent1, parent2, initial_board)
+                offspring = random.choice([offspring1, offspring2])
                 crossover_count += 1
-                offspring1, offspring2 = crossover(parent1, parent2, initial_board=initial_population[0])
-                offspring = offspring1 if sudoku_fitness(offspring1) > sudoku_fitness(offspring2) else offspring2
             new_population.append(offspring)
 
         population = new_population
         generation += 1
 
-    end_time = time.time()
-    print(f"Elapsed time: {end_time - start_time} seconds")
-    print(f"Best solution found with fitness: {best_fitness}")
-    print("Final solution:")
-    for row in best_solution:
-        print(row)
-    print(f"Mutation count: {mutation_count}")
-    print(f"Crossover count: {crossover_count}")
+        # Check elapsed time and stop if exceeds 30 seconds
+        if time.time() - start_time > 30:
+            break
 
-# Run the genetic algorithm
-genetic_algorithm(population_size=20, max_generations=100, mutation_rate=0.2)
+    end_time = time.time()
+    total_time = end_time - start_time
+    print(f"\nTotal generations: {generation}")
+    print(f"Total time taken: {total_time} seconds")
+    print(f"Total mutations occurred: {mutation_count}")
+    print(f"Total crossovers occurred: {crossover_count}")
+
+    return best_solution
+
+# Function to print the Sudoku board
+def print_sudoku(board):
+    for row in board:
+        print(row)
+
+# Example usage
+print("Randomly generated Sudoku puzzle:")
+random_puzzle = generate_sudoku(num_filled_entries=random.randint(25, 30))
+initial_board = copy.deepcopy(random_puzzle)  # Make a deep copy of the initial puzzle
+print_sudoku(random_puzzle)
+print("\nSolving using genetic algorithm...\n")
+best_solution = genetic_algorithm(population_size=50, max_generations=1000, mutation_rate=0.1, initial_board=initial_board)
+print("\nBest solution found:")
+print_sudoku(best_solution)
+
